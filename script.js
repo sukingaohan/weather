@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsForm = document.getElementById('settings-form');
     const apiKeyInput = document.getElementById('api-key');
     const locationInput = document.getElementById('location');
+    const card = document.getElementById('current-weather-card');
+    const forecastContainer = document.querySelector('.forecast-container');
 
     const weatherMap = {
         'CLEAR_DAY': { name: '晴', className: 'sunny', icon: 'fa-sun' },
@@ -55,9 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 获取并更新天气
     async function fetchWeather(apiKey, location) {
-        // 先显示加载状态
-        const card = document.getElementById('current-weather-card');
         card.innerHTML = `<div class="weather-icon"><i class="fas fa-spinner fa-spin"></i></div><p class="weather-desc">正在加载天气...</p>`;
+        forecastContainer.innerHTML = ''; // 清空旧的预报
 
         const apiUrl = `https://api.caiyunapp.com/v2.6/${apiKey}/${location}/weather.json?unit=metric:v2&dailysteps=3`;
         try {
@@ -75,37 +76,71 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 更新UI
+    // 更新UI (更健壮的版本)
     function updateUI(result) {
-        const { realtime, hourly, daily } = result;
+        const { realtime, hourly, daily, alert, minutely } = result;
 
-        // 更新主卡片
+        // 1. 更新当前天气
         const currentWeather = weatherMap[realtime.skycon] || {};
-        const card = document.getElementById('current-weather-card');
         card.className = 'card ' + currentWeather.className;
         card.innerHTML = `
-            <div class="weather-icon" id="current-icon"><i class="fas ${currentWeather.icon}"></i></div>
-            <h2 class="weather-title" id="current-title">${currentWeather.name}</h2>
-            <div class="temp" id="current-temp">${Math.round(realtime.temperature)}°C</div>
-            <p class="weather-desc" id="current-desc">${result.minutely?.description || '今日天气概览'}</p>
+            <div class="weather-icon"><i class="fas ${currentWeather.icon || 'fa-question-circle'}"></i></div>
+            <h2 class="weather-title">${currentWeather.name || '未知'}</h2>
+            <div class="temp">${Math.round(realtime.temperature)}°C</div>
+            <p class="weather-desc">${minutely?.description || '今日天气概览'}</p>
             <div class="details">
                 <div class="detail-item"><i class="fas fa-temperature-half"></i><p>体感 ${Math.round(realtime.apparent_temperature)}°C</p></div>
                 <div class="detail-item"><i class="fas fa-tint"></i><p>湿度 ${Math.round(realtime.humidity * 100)}%</p></div>
                 <div class="detail-item"><i class="fas fa-wind"></i><p>风速 ${realtime.wind.speed.toFixed(1)} km/h</p></div>
             </div>`;
+        document.getElementById('location-name').textContent = alert?.content[0]?.location || '天气预报';
+
+        // 2. 更新预报容器
+        let forecastHTML = '';
+
+        // 4小时后
+        if (hourly && hourly.skycon?.length > 4 && hourly.temperature?.length > 4) {
+            const hourlyWeather = weatherMap[hourly.skycon[4].value] || {};
+            forecastHTML += `
+                <div class="forecast-card">
+                    <h3>4小时后</h3>
+                    <div class="weather-icon"><i class="fas ${hourlyWeather.icon || 'fa-question-circle'}"></i></div>
+                    <div class="temp">${Math.round(hourly.temperature[4].value)}°C</div>
+                    <div class="weather-title">${hourlyWeather.name || '--'}</div>
+                </div>`;
+        } else {
+             forecastHTML += `<div class="forecast-card"><h3>4小时后</h3><div class="weather-icon"><i class="fas fa-clock"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
+        }
+
+        // 明天
+        if (daily && daily.skycon?.length > 1 && daily.temperature?.length > 1) {
+            const tomorrowWeather = weatherMap[daily.skycon[1].value] || {};
+            forecastHTML += `
+                <div class="forecast-card">
+                    <h3>明天</h3>
+                    <div class="weather-icon"><i class="fas ${tomorrowWeather.icon || 'fa-question-circle'}"></i></div>
+                    <div class="temp">${Math.round(daily.temperature[1].min)}°/${Math.round(daily.temperature[1].max)}°</div>
+                    <div class="weather-title">${tomorrowWeather.name || '--'}</div>
+                </div>`;
+        } else {
+            forecastHTML += `<div class="forecast-card"><h3>明天</h3><div class="weather-icon"><i class="fas fa-calendar-day"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
+        }
+
+        // 后天
+        if (daily && daily.skycon?.length > 2 && daily.temperature?.length > 2) {
+            const dayAfterWeather = weatherMap[daily.skycon[2].value] || {};
+            forecastHTML += `
+                <div class="forecast-card">
+                    <h3>后天</h3>
+                    <div class="weather-icon"><i class="fas ${dayAfterWeather.icon || 'fa-question-circle'}"></i></div>
+                    <div class="temp">${Math.round(daily.temperature[2].min)}°/${Math.round(daily.temperature[2].max)}°</div>
+                    <div class="weather-title">${dayAfterWeather.name || '--'}</div>
+                </div>`;
+        } else {
+            forecastHTML += `<div class="forecast-card"><h3>后天</h3><div class="weather-icon"><i class="fas fa-calendar-week"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
+        }
         
-        // 更新预报
-        const forecastContainer = document.querySelector('.forecast-container');
-        const hourlyWeather = weatherMap[hourly.skycon[4].value] || {};
-        const tomorrowWeather = weatherMap[daily.skycon[1].value] || {};
-        const dayAfterWeather = weatherMap[daily.skycon[2].value] || {};
-        
-        forecastContainer.innerHTML = `
-            <div class="forecast-card"><h3>4小时后</h3><div class="weather-icon"><i class="fas ${hourlyWeather.icon}"></i></div><div class="temp">${Math.round(hourly.temperature[4].value)}°C</div><div class="weather-title">${hourlyWeather.name}</div></div>
-            <div class="forecast-card"><h3>明天</h3><div class="weather-icon"><i class="fas ${tomorrowWeather.icon}"></i></div><div class="temp">${Math.round(daily.temperature[1].min)}°/${Math.round(daily.temperature[1].max)}°</div><div class="weather-title">${tomorrowWeather.name}</div></div>
-            <div class="forecast-card"><h3>后天</h3><div class="weather-icon"><i class="fas ${dayAfterWeather.icon}"></i></div><div class="temp">${Math.round(daily.temperature[2].min)}°/${Math.round(daily.temperature[2].max)}°</div><div class="weather-title">${dayAfterWeather.name}</div></div>
-        `;
-        document.getElementById('location-name').textContent = result.alert?.content[0]?.location || '天气预报';
+        forecastContainer.innerHTML = forecastHTML;
     }
 
     // 页面加载时的启动逻辑
