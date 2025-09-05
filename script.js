@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const card = document.getElementById('current-weather-card');
     const forecastContainer = document.querySelector('.forecast-container');
 
+    console.log("--- 脚本已加载，等待用户操作 ---");
+
     const weatherMap = {
         'CLEAR_DAY': { name: '晴', className: 'sunny', icon: 'fa-sun' },
         'CLEAR_NIGHT': { name: '晴', className: 'sunny', icon: 'fa-moon' },
@@ -31,11 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
         'WIND': { name: '大风', className: 'cloudy', icon: 'fa-wind' },
     };
 
-    // 显示/隐藏设置弹窗
     const showSettingsModal = () => settingsModal.classList.remove('hidden');
     const hideSettingsModal = () => settingsModal.classList.add('hidden');
 
-    // 处理设置表单提交
     settingsForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const apiKey = apiKeyInput.value.trim();
@@ -48,36 +48,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 点击设置按钮
     settingsBtn.addEventListener('click', () => {
         apiKeyInput.value = localStorage.getItem('weatherApiKey') || '';
         locationInput.value = localStorage.getItem('weatherLocation') || '';
         showSettingsModal();
     });
 
-    // 获取并更新天气
     async function fetchWeather(apiKey, location) {
         card.innerHTML = `<div class="weather-icon"><i class="fas fa-spinner fa-spin"></i></div><p class="weather-desc">正在加载天气...</p>`;
-        forecastContainer.innerHTML = ''; // 清空旧的预报
+        forecastContainer.innerHTML = '';
 
         const apiUrl = `https://api.caiyunapp.com/v2.6/${apiKey}/${location}/weather.json?unit=metric:v2&dailysteps=3`;
+        
+        console.log("LOG 1: 开始获取天气数据, 请求URL:", apiUrl);
+
         try {
             const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error(`HTTP 错误! 状态码: ${response.status}`);
+            console.log("LOG 2: 收到服务器响应 (Response)", response);
+
+            if (!response.ok) {
+                throw new Error(`HTTP 错误! 状态码: ${response.status}`);
+            }
+
             const data = await response.json();
+            console.log("LOG 3: 成功解析JSON数据 (Data)", data);
+
             if (data.status === 'ok') {
+                console.log("LOG 4: API状态为'ok', 准备更新UI...");
                 updateUI(data.result);
+                console.log("LOG 6: UI更新函数执行完毕。");
             } else {
-                throw new Error(`API 错误: ${data.error}`);
+                throw new Error(`API 业务错误: ${data.error}`);
             }
         } catch (error) {
-            console.error("获取天气失败:", error);
-            card.innerHTML = `<div class="weather-icon"><i class="fas fa-exclamation-triangle"></i></div><p class="weather-desc">加载失败: ${error.message}<br>请点击右上角齿轮检查您的设置。</p>`;
+            console.error("!!! 捕获到错误 !!! (Error caught)", error);
+            card.innerHTML = `<div class="weather-icon"><i class="fas fa-exclamation-triangle"></i></div><p class="weather-desc">加载失败: ${error.message}<br>请按F12打开控制台查看详细错误日志。</p>`;
         }
     }
 
-    // 更新UI (更健壮的版本)
     function updateUI(result) {
+        console.log("LOG 5: 进入updateUI函数, 接收到的数据 (Result)", result);
+        
         const { realtime, hourly, daily, alert, minutely } = result;
 
         // 1. 更新当前天气
@@ -97,31 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 2. 更新预报容器
         let forecastHTML = '';
-
+        console.log("  - 准备处理小时级预报, 数据:", hourly);
         // 4小时后
         if (hourly && hourly.skycon?.length > 4 && hourly.temperature?.length > 4) {
             const hourlyWeather = weatherMap[hourly.skycon[4].value] || {};
-            forecastHTML += `
-                <div class="forecast-card">
-                    <h3>4小时后</h3>
-                    <div class="weather-icon"><i class="fas ${hourlyWeather.icon || 'fa-question-circle'}"></i></div>
-                    <div class="temp">${Math.round(hourly.temperature[4].value)}°C</div>
-                    <div class="weather-title">${hourlyWeather.name || '--'}</div>
-                </div>`;
+            forecastHTML += `<div class="forecast-card"><h3>4小时后</h3><div class="weather-icon"><i class="fas ${hourlyWeather.icon || 'fa-question-circle'}"></i></div><div class="temp">${Math.round(hourly.temperature[4].value)}°C</div><div class="weather-title">${hourlyWeather.name || '--'}</div></div>`;
         } else {
              forecastHTML += `<div class="forecast-card"><h3>4小时后</h3><div class="weather-icon"><i class="fas fa-clock"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
         }
 
+        console.log("  - 准备处理天级预报, 数据:", daily);
         // 明天
         if (daily && daily.skycon?.length > 1 && daily.temperature?.length > 1) {
             const tomorrowWeather = weatherMap[daily.skycon[1].value] || {};
-            forecastHTML += `
-                <div class="forecast-card">
-                    <h3>明天</h3>
-                    <div class="weather-icon"><i class="fas ${tomorrowWeather.icon || 'fa-question-circle'}"></i></div>
-                    <div class="temp">${Math.round(daily.temperature[1].min)}°/${Math.round(daily.temperature[1].max)}°</div>
-                    <div class="weather-title">${tomorrowWeather.name || '--'}</div>
-                </div>`;
+            forecastHTML += `<div class="forecast-card"><h3>明天</h3><div class="weather-icon"><i class="fas ${tomorrowWeather.icon || 'fa-question-circle'}"></i></div><div class="temp">${Math.round(daily.temperature[1].min)}°/${Math.round(daily.temperature[1].max)}°</div><div class="weather-title">${tomorrowWeather.name || '--'}</div></div>`;
         } else {
             forecastHTML += `<div class="forecast-card"><h3>明天</h3><div class="weather-icon"><i class="fas fa-calendar-day"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
         }
@@ -129,13 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 后天
         if (daily && daily.skycon?.length > 2 && daily.temperature?.length > 2) {
             const dayAfterWeather = weatherMap[daily.skycon[2].value] || {};
-            forecastHTML += `
-                <div class="forecast-card">
-                    <h3>后天</h3>
-                    <div class="weather-icon"><i class="fas ${dayAfterWeather.icon || 'fa-question-circle'}"></i></div>
-                    <div class="temp">${Math.round(daily.temperature[2].min)}°/${Math.round(daily.temperature[2].max)}°</div>
-                    <div class="weather-title">${dayAfterWeather.name || '--'}</div>
-                </div>`;
+            forecastHTML += `<div class="forecast-card"><h3>后天</h3><div class="weather-icon"><i class="fas ${dayAfterWeather.icon || 'fa-question-circle'}"></i></div><div class="temp">${Math.round(daily.temperature[2].min)}°/${Math.round(daily.temperature[2].max)}°</div><div class="weather-title">${dayAfterWeather.name || '--'}</div></div>`;
         } else {
             forecastHTML += `<div class="forecast-card"><h3>后天</h3><div class="weather-icon"><i class="fas fa-calendar-week"></i></div><p style="margin-top:20px;">预报数据不足</p></div>`;
         }
@@ -143,13 +137,15 @@ document.addEventListener('DOMContentLoaded', () => {
         forecastContainer.innerHTML = forecastHTML;
     }
 
-    // 页面加载时的启动逻辑
     function init() {
+        console.log("--- 页面初始化 ---");
         const savedApiKey = localStorage.getItem('weatherApiKey');
         const savedLocation = localStorage.getItem('weatherLocation');
         if (savedApiKey && savedLocation) {
+            console.log("在本地存储中找到配置, 准备获取天气...");
             fetchWeather(savedApiKey, savedLocation);
         } else {
+            console.log("未找到本地配置, 显示设置窗口。");
             showSettingsModal();
         }
     }
